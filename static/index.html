@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Signal Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Signal Dashboard</h1>
+
+    <div class="controls card">
+      <label>Agent ID: <input id="agentId" value="agent1"></label>
+      <label>User ID: <input id="userId" value="user1"></label>
+      <button onclick="refreshDashboard()">Refresh</button>
+    </div>
+
+    <div class="chart-container card">
+      <canvas id="chart"></canvas>
+    </div>
+
+    <div class="table-container card">
+        <h2>📝 Recent Logs</h2>
+        <div class="logs-box">
+          <table id="logs-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>User Input</th>
+                <th>Signal</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="status-message"></p>
+      </div>
+      
+      
+  <script src="script.js"></script>
+</body>
+</html>
