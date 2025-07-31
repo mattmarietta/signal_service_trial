@@ -63,17 +63,7 @@ curl -X POST http://127.0.0.1:8000/log \
 ---
 
 ## Project Structure
-
-signal_service_trial/
-├── api.py           # FastAPI service
-├── logger.py        # Logger with write/read/summary
-├── classifier.py    # Keyword-based signal classifier
-├── logs.jsonl       # Auto-generated log file
-├── static/
-│   ├── index.html   # Interactive dashboard
-│   ├── style.css    # Dashboard styling
-│   └── script.js    # Chart.js + Fetch API logic
-└── README.md
+<img width="458" height="205" alt="Screenshot 2025-07-31 at 4 58 14 PM" src="https://github.com/user-attachments/assets/124d7e99-e169-4adf-b31b-91645822b69a" />
 
 ---
 
