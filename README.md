@@ -1,4 +1,6 @@
 # Signal Logging & Visualization Microservice
+<img width="748" height="480" alt="Screenshot 2025-07-31 at 5 00 06 PM" src="https://github.com/user-attachments/assets/8233bc66-e8e8-4e89-97fd-b5268bc99042" />
+
 
 ## Inspiration
 Understanding user sentiment during AI-agent interactions is crucial for improving experiences. Many teams collect raw logs but lack tools to **classify signals** (positive, neutral, stressed, uncertain) or **visualize trends** easily.  
