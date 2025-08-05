@@ -1,71 +1,71 @@
-# Design Note
+Design Note
 
-## 1. Overall Structure & Flow
+1. Overall Structure & Flow
 
-- **Request Validation**  
+- Request Validation
   - Every incoming `POST /event` is parsed by a Pydantic model (`SignalEvent`).  
-  - If any field is missing or of the wrong type, FastAPI auto-returns a **422 Unprocessable Entity**, and the event is **not** stored.
+  - If any field is missing or of the wrong type, FastAPI auto-returns a 422 Unprocessable Entity, and the event is not stored.
 
-- **Event Storage**  
+- Event Storage
   - Valid events are saved immediately to a SQLite table (`events`) via SQLAlchemy ORM.  
   - This provides a durable audit trail and easy querying.
 
-- **Anomaly Detection**  
-  - Maintain an in-memory **sliding window** of the last 5 seconds of event timestamps per user using a `deque`.  
+- Anomaly Detection
+  - Maintain an in-memory sliding window of the last 5 seconds of event timestamps per user using a `deque`.  
   - On each new event:  
-    1. **Append** its timestamp into the user’s deque.  
-    2. **Purge** any timestamps older than 5 seconds.  
-    3. **Check** the deque size—if it exceeds 10, we’ve detected a “rapid-fire” anomaly.  
+    1. Append its timestamp into the user’s deque.  
+    2. Purge any timestamps older than 5 seconds.  
+    3. Check the deque size—if it exceeds 10, we’ve detected a “rapid-fire” anomaly.  
   - When an anomaly is flagged, record it in a second table (`anomalies`) with:  
-    - **user_id**  
-    - **detected_at** (timestamp of detection)  
-    - **count** (how many events triggered it)  
-    - **window_start** (start of the 5-second window)
+    - user_id 
+    - detected_at (timestamp of detection)  
+    - count (how many events triggered it)  
+    - window_start (start of the 5-second window)
 
-- **Anomalies Retrieval**  
+- Anomalies Retrieval  
   - A simple `GET /anomalies/{user_id}` endpoint fetches all anomaly records for that user, sorted by most-recent first.
 
 ---
 
-## 2. Scaling to Production
+2. Scaling to Production
 
-- **Database**  
-  - Swap SQLite for **Postgres** (or another managed RDBMS) to handle higher write volumes and concurrent connections.  
-  - Use **connection pooling** to avoid overload.
+- Database
+  - Swap SQLite for Postgres to handle higher write volumes and concurrent connections.  
+  - Use connection pooling to avoid overload.
 
-- **Sliding-Window State**  
-  - Replace the in-memory Python `deque` with a **Redis sorted set** per user.  
+- Sliding-Window State 
+  - Replace the in-memory Python `deque` with a Redis sorted set per user.  
   - Redis enables multiple API instances to share and update window state atomically.
 
-- **Event Ingestion**  
-  - For very high throughput, route incoming events through a **message broker** (Kafka, RabbitMQ).  
+- Event Ingestion 
+  - For very high throughput, route incoming events through a message broker (Kafka, RabbitMQ).  
   - A separate consumer service reads from the queue, applies validation, storage, and anomaly logic—keeping the API layer fast and stateless.
 
-- **Horizontal Scaling**  
+- Horizontal Scaling  
   - Run multiple FastAPI workers behind a load balancer.  
   - With state in Redis and events queued, new instances can spin up without data loss.
 
 ---
 
-## 3. Edge Cases & Mitigations
+3. Edge Cases & Mitigations
 
-- **Clock Skew**  
+- Clock Skew
   - Clients may send slightly out-of-sync timestamps.  
-  - *Mitigation*: In production, use **server-assigned** `received_at` timestamps instead of trusting client time.
+  - Mitigation: In production, use server-assigned `received_at` timestamps instead of trusting client time.
 
-- **Out-of-Order Events**  
+- Out-of-Order Events 
   - Late arrivals could fall outside the intended 5-second window.  
-  - *Mitigation*: Buffer events briefly to reorder by timestamp before processing, or base detection on arrival order if “real-time” is paramount.
+  - Mitigation: Buffer events briefly to reorder by timestamp before processing, or base detection on arrival order if “real-time” is paramount.
 
-- **Database Write Failures**  
+- Database Write Failures  
   - Transient DB errors may cause writes to fail.  
-  - *Mitigation*: Wrap DB commits in **retry logic** and/or push failed records to a **dead-letter queue** for later inspection.
+  - Mitigation: Wrap DB commits in retry logic and/or push failed records to a dead-letter queue for later inspection.
 
-- **Excessively Large Payloads**  
+- Excessively Large Payloads 
   - Clients might send huge JSON objects.  
-  - *Mitigation*: Enforce a **maximum payload size** in the Pydantic model (e.g. `Field(max_length=5000)`) or at the API gateway.
+  - *Mitigation*: Enforce a maximum payload size in the Pydantic model (e.g. `Field(max_length=5000)`) or at the API gateway.
 
-- **Memory Growth**  
+- Memory Growth
   - An in-memory deque could grow if a user never sends events again.  
-  - *Mitigation*: Periodically **expire** deques for inactive users or use Redis with **TTL** on window keys.
+  - Mitigation: Periodically expire deques for inactive users or use Redis with TTL on window keys.
 
