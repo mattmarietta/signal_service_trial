@@ -86,26 +86,7 @@ Integrity service on http://localhost:8001, Redis on 6379
 ---
 
 ## Project Structure
-
-signal_service_trial/
-├── api.py                  # Logging & Visualization FastAPI service
-├── logger.py               # Logger class (writes JSONL, calls classifier)
-├── classifier.py           # Keyword-based classifier (configurable)
-├── logs.jsonl              # Log storage
-├── static/                 # Dashboard assets
-│   ├── index.html
-│   ├── style.css
-│   └── script.js
-├── integrity_service/      # Signal Integrity Monitor
-│   ├── config.yaml         # thresholds & keywords
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── main.py             # FastAPI service with auth, health, anomaly logic
-│   ├── models.py           # Pydantic + SQLAlchemy schemas
-│   ├── requirements.txt
-│   └── integrity.db        # SQLite (auto-generated)
-├── requirements.txt        # Combined or root dependencies
-└── README.md               # This file
+<img width="611" height="392" alt="Screenshot 2025-08-05 at 1 30 14 AM" src="https://github.com/user-attachments/assets/66835dfc-bc77-48f2-90ee-bda6b7313eff" />
 
 ---
 
