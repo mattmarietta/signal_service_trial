@@ -52,20 +52,20 @@ Ensure signal data integrity by validating schemas, storing events, and flagging
 
 ## Quick Start
 
-# 1. Clone the repo
+### 1. Clone the repo
 git clone https://github.com/vlqv9210/signal_service_trial.git
 cd signal_service_trial
 
-# 2. Install dependencies
+### 2. Install dependencies
 pip install fastapi uvicorn matplotlib
 
-# 3. Start Logging service
+### 3. Start Logging service
 uvicorn api:app --reload --port 8000
 
-# 4. Open dashboard in browser
-#    http://127.0.0.1:8000/static/index.html
+### 4. Open dashboard in browser
+###    http://127.0.0.1:8000/static/index.html
 
-# 5. In a new terminal, run Integrity Monitor:
+### 5. In a new terminal, run Integrity Monitor:
 cd integrity_service
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
