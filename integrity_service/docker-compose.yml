@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  integrity:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      - API_KEY=${API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"

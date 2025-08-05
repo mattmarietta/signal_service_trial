@@ -40,10 +40,13 @@ Ensure signal data integrity by validating schemas, storing events, and flagging
 
 ---
 
-## Tech Stack
+### Tech Stack
 - **Backend**: Python, FastAPI, Pydantic, SQLAlchemy, Matplotlib  
 - **Frontend**: HTML, CSS (glassmorphism), JavaScript, Chart.js  
-- **Databases**: JSONL file (logging service), SQLite (integrity service)  
+- **Datastores**:  
+  - JSONL file (`logs.jsonl`) for logging service  
+  - SQLite (default) or Postgres for integrity service  
+  - Redis for sliding window state  
 
 ---
 
@@ -54,20 +57,30 @@ git clone https://github.com/vlqv9210/signal_service_trial.git
 cd signal_service_trial
 
 # 2. Install dependencies
-pip install fastapi uvicorn matplotlib sqlalchemy pydantic
+pip install fastapi uvicorn matplotlib
 
 # 3. Start Logging service
 uvicorn api:app --reload --port 8000
 
-# 4. Start Integrity Monitor (in a new terminal)
+# 4. Open dashboard in browser
+#    http://127.0.0.1:8000/static/index.html
+
+# 5. In a new terminal, run Integrity Monitor:
 cd integrity_service
+pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
 
 Logging API runs at http://127.0.0.1:8000
-
 Dashboard: open static/index.html (uses port 8000)
-
 Integrity API runs at http://127.0.0.1:8001
+
+---
+
+## Docker (Integrity Monitor)
+cd integrity_service
+docker-compose up --build
+
+Integrity service on http://localhost:8001, Redis on 6379
 
 
 ---
@@ -75,39 +88,45 @@ Integrity API runs at http://127.0.0.1:8001
 ## Project Structure
 
 signal_service_trial/
-├── api.py              # Logging & Visualization FastAPI service
-├── logger.py           # Logger class with classification
-├── classifier.py       # Keyword-based signal classifier
-├── logs.jsonl          # Generated log storage
-├── static/             # Web dashboard (HTML/CSS/JS)
+├── api.py                  # Logging & Visualization FastAPI service
+├── logger.py               # Logger class (writes JSONL, calls classifier)
+├── classifier.py           # Keyword-based classifier (configurable)
+├── logs.jsonl              # Log storage
+├── static/                 # Dashboard assets
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
-├── integrity_service/
-│   ├── models.py       # Pydantic + SQLAlchemy schemas
-│   ├── main.py         # Integrity Monitor FastAPI service
-│   └── integrity.db    # SQLite database
-├── requirements.txt    # Combined dependencies
-└── README.md
+├── integrity_service/      # Signal Integrity Monitor
+│   ├── config.yaml         # thresholds & keywords
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── main.py             # FastAPI service with auth, health, anomaly logic
+│   ├── models.py           # Pydantic + SQLAlchemy schemas
+│   ├── requirements.txt
+│   └── integrity.db        # SQLite (auto-generated)
+├── requirements.txt        # Combined or root dependencies
+└── README.md               # This file
 
 ---
 
 ## Design Notes
 
-Structure
-- Logging Service separates logging, classification, storage, and visualization logic.
-- Integrity Service cleanly layers validation, storage, and anomaly detection.
+Overall Structure
+- Logging Service handles sentiment logging, classification, and dashboard visualization.
+- Integrity Service handles schema validation, durable storage, anomaly detection, and alerting.
 
 Scalability
-- Swap SQLite → PostgreSQL & Redis for sliding windows.
-- Use Kafka/RabbitMQ for event ingestion.
-- Deploy multiple FastAPI instances behind a load‐balancer.
+- Databases: Swap SQLite → Postgres, use connection pooling.
+- State: Move sliding windows to Redis for multi-instance consistency.
+- Ingestion: Buffer via Kafka/RabbitMQ, process with background workers.
+- Deployment: Containerize with Docker, run multiple FastAPI instances behind a load-balancer.
 
 Edge Cases
-- Clock skew: Normalize timestamps on receipt.
-- Out‐of‐order events: Buffer and sort by timestamp.
-- DB failures: Implement retries or dead‐letter queues.
-- Payload bloat: Reject or truncate large payloads.
+- Clock Skew: Use server receipt timestamp or normalize client times.
+- Out-of-order Events: Buffer and reorder by timestamp or process in arrival order.
+- DB Failures: Retry writes and push to a dead-letter queue on persistent failure.
+- Large Payloads: Enforce maximum JSON size via Pydantic or API gateway.
+- Memory Growth: Redis TTL on sliding-window keys or expire in-memory structures after inactivity.
 
 ### Contributors
 Vy Vuong (Author)

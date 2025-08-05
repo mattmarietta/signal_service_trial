@@ -1,0 +1,21 @@
+database:
+  url: ${DATABASE_URL:-sqlite:///integrity.db}
+
+redis:
+  url: ${REDIS_URL:-redis://localhost:6379/0}
+
+webhook:
+  url: ${ALERT_WEBHOOK_URL:-}
+
+thresholds:
+  default: 10
+  stressed: 8
+  neutral: 20
+  positive: 15
+  uncertain: 12
+
+keywords:
+  uncertain: ["maybe","not sure","unsure","confused","?"]
+  stressed:  ["angry","frustrated","upset","stressed"]
+  positive: ["thank","great","happy","awesome","good"]
+  neutral:  []
