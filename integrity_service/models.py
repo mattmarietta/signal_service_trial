@@ -1,4 +1,7 @@
 from datetime import datetime
+from pathlib import Path
+
+import yaml
 from pydantic import BaseModel, Field
 from sqlalchemy import (
     Column, Integer, String, DateTime, JSON, create_engine
@@ -6,7 +9,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# ─── 1. Pydantic model for validation ──────────────────────────────────────────
+# ─── 1. Pydantic model for request validation ─────────────────────────────────
 class SignalEvent(BaseModel):
     user_id: str
     agent_id: str
@@ -34,31 +37,28 @@ class Anomaly(Base):
     count = Column(Integer)
     window_start = Column(DateTime)
     severity = Column(String, default="warning")
-    rule = Column(String)  # e.g. "stressed:8"
+    rule = Column(String)  # e.g. "rapid_fire:10_in_5s"
 
     def as_dict(self):
         return {
-            "user_id": self.user_id,
-            "detected_at": self.detected_at.isoformat(),
-            "count": self.count,
-            "window_start": self.window_start.isoformat(),
-            "severity": self.severity,
-            "rule": self.rule,
+            "user_id":            self.user_id,
+            "detected_at":        self.detected_at.isoformat(),
+            "count":              self.count,
+            "window_start":       self.window_start.isoformat(),
+            "severity":           self.severity,
+            "rule":               self.rule,
         }
 
-# ─── 3. SQLite engine & session ───────────────────────────────────────────────
-from pathlib import Path
-import yaml
-
-# Load DB URL from config.yaml
+# ─── 3. Load database URL from config or default ──────────────────────────────
 try:
     cfg = yaml.safe_load(Path("config.yaml").read_text())
-    db_url = cfg["database"]["url"]
+    db_url = cfg.get("database", {}).get("url", "sqlite:///integrity.db")
 except Exception:
     db_url = "sqlite:///integrity.db"
 
+# ─── 4. Engine & session factory ──────────────────────────────────────────────
 engine = create_engine(db_url, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
-# ─── 4. Create tables ─────────────────────────────────────────────────────────
+# ─── 5. Create tables if they don’t exist ────────────────────────────────────
 Base.metadata.create_all(bind=engine)
