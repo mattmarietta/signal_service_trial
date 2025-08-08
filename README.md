@@ -52,20 +52,20 @@ Ensure signal data integrity by validating schemas, storing events, and flagging
 
 ## Quick Start
 
-# 1. Clone the repo
+### 1. Clone the repo
 git clone https://github.com/vlqv9210/signal_service_trial.git
 cd signal_service_trial
 
-# 2. Install dependencies
+### 2. Install dependencies
 pip install fastapi uvicorn matplotlib
 
-# 3. Start Logging service
+### 3. Start Logging service
 uvicorn api:app --reload --port 8000
 
-# 4. Open dashboard in browser
-#    http://127.0.0.1:8000/static/index.html
+### 4. Open dashboard in browser
+###    http://127.0.0.1:8000/static/index.html
 
-# 5. In a new terminal, run Integrity Monitor:
+### 5. In a new terminal, run Integrity Monitor:
 cd integrity_service
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
@@ -86,26 +86,7 @@ Integrity service on http://localhost:8001, Redis on 6379
 ---
 
 ## Project Structure
-
-signal_service_trial/
-├── api.py                  # Logging & Visualization FastAPI service
-├── logger.py               # Logger class (writes JSONL, calls classifier)
-├── classifier.py           # Keyword-based classifier (configurable)
-├── logs.jsonl              # Log storage
-├── static/                 # Dashboard assets
-│   ├── index.html
-│   ├── style.css
-│   └── script.js
-├── integrity_service/      # Signal Integrity Monitor
-│   ├── config.yaml         # thresholds & keywords
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── main.py             # FastAPI service with auth, health, anomaly logic
-│   ├── models.py           # Pydantic + SQLAlchemy schemas
-│   ├── requirements.txt
-│   └── integrity.db        # SQLite (auto-generated)
-├── requirements.txt        # Combined or root dependencies
-└── README.md               # This file
+<img width="611" height="392" alt="Screenshot 2025-08-05 at 1 30 14 AM" src="https://github.com/user-attachments/assets/66835dfc-bc77-48f2-90ee-bda6b7313eff" />
 
 ---
 
