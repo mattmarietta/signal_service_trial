@@ -50,7 +50,7 @@ Ensure signal data integrity by validating schemas, storing events, and flagging
 
 ---
 
-## Quick Start
+## Quick Start (Local Setup for now)
 
 ### 1. Clone the repo
 git clone https://github.com/vlqv9210/signal_service_trial.git
@@ -59,13 +59,53 @@ cd signal_service_trial
 ### 2. Install dependencies
 pip install fastapi uvicorn matplotlib
 
-### 3. Start Logging service
+
+### 3. Configuration (Required for Local Run)
+**A. Configure Integrity Service (Port 8001):**
+The `config.yaml` file must be updated to use hardcoded, local URLs.
+- **File:** `integrity_service/config.yaml`
+- **Changes:**
+
+```yaml
+# BEFORE
+database:
+  url: ${DATABASE_URL:-sqlite:///integrity.db}
+redis:
+  url: ${REDIS_URL:-redis://localhost:6379/0}
+webhook:
+  url: ${ALERT_WEBHOOK_URL:-}
+
+# AFTER
+database:
+  url: sqlite:///integrity.db
+redis:
+  url: redis://localhost:6379/0
+webhook:
+  url: ""
+```
+
+**B. Configure Logging Dashboard (Port 8000):**
+The api.py file must be updated to serve the static folder.
+ - **File:** api.py (in the root folder)
+- **Changes:** Python
+```python
+# Add these imports at the top
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+# ... other imports
+
+# Add this line right after 'app = FastAPI()'
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+```
+
+### 4. Start Logging service
 uvicorn api:app --reload --port 8000
 
-### 4. Open dashboard in browser
-###    http://127.0.0.1:8000/static/index.html
+### 5. Open dashboard in browser
+###  http://127.0.0.1:8000/static/index.html
 
-### 5. In a new terminal, run Integrity Monitor:
+### 6. In a new terminal, run Integrity Monitor:
 cd integrity_service
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
@@ -111,4 +151,4 @@ Edge Cases
 
 ### Contributors
 Vy Vuong (Author)
-
+Maintainer: Matt <October 2025> (ownership transfer from Vy)
