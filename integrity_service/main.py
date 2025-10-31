@@ -1,6 +1,5 @@
 import os
 from datetime import timedelta, datetime
-
 import yaml
 import redis
 import requests
@@ -8,9 +7,11 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 from fastapi import FastAPI, HTTPException, Depends, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from models import Event, Anomaly, SessionLocal, Base, engine
+from dotenv import load_dotenv
 
-from models import Event, Anomaly, SessionLocal, Base, engine, windows
 
+load_dotenv()
 # ─── 1. Load configuration ─────────────────────────────────────────────────────
 cfg = yaml.safe_load(open("config.yaml"))
 DB_URL       = cfg["database"]["url"]

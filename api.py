@@ -1,16 +1,28 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import matplotlib
 matplotlib.use("Agg")      # force non-interactive backend
 import matplotlib.pyplot as plt
 import io
+import os
+import json
+import httpx
+from datetime import datetime
 
 from logger import Logger
+from classifier import classify_signal
 
 
 logger = Logger("logs.jsonl")
 app = FastAPI(title="Signal Service API")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Router integration configuration
+ROUTER_URL = os.getenv("ROUTER_URL", "http://localhost:9000/ingest")
+INTEGRITY_URL = os.getenv("INTEGRITY_URL", "http://localhost:8001/event")
+INTEGRITY_API_KEY = os.getenv("INTEGRITY_API_KEY", "")
 
 # Enable CORS for frontend
 app.add_middleware(
@@ -22,9 +34,111 @@ app.add_middleware(
 )
 
 @app.post("/log")
-def log_interaction(data: dict):
-    logger.write(**data)
-    return {"status": "ok", "logged": data}
+async def log_interaction(data: dict):
+    """
+    Vy's logging endpoint that:
+    1. Classifies sentiment
+    2. Writes to logs.jsonl
+    3. Optionally calls integrity service
+    4. Forwards to router /ingest endpoint
+    """
+    # 1) Classify sentiment from text
+    text = data.get("text") or data.get("payload", {}).get("text") or data.get("user_input", "")
+    sentiment = classify_signal(text) if text else "neutral"
+    
+    # Prepare record for logging
+    rec = data.copy()
+    rec["sentiment"] = sentiment
+    
+    # Write to logs.jsonl (backwards compatible with existing logger.write)
+    # Handle both old format (agent_id, user_id, user_input) and new format (user_id, agent_id, timestamp, payload)
+    if "user_input" in rec:
+        # Old format
+        logger.write(
+            agent_id=rec.get("agent_id", "default"),
+            user_id=rec.get("user_id", "unknown"),
+            user_input=rec.get("user_input", ""),
+            detected_signal=sentiment,
+            session_id=rec.get("session_id")
+        )
+    else:
+        # New format - write raw JSON to logs.jsonl
+        with open("logs.jsonl", "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    
+    # 2) Optionally call integrity service
+    integrity_ok = True
+    integrity_issues = []
+    
+    # If integrity URL is configured and API key exists, call it
+    if INTEGRITY_URL and INTEGRITY_API_KEY:
+        try:
+            # Handle timestamp - convert string to datetime if needed for integrity service
+            timestamp = rec.get("timestamp")
+            if isinstance(timestamp, str):
+                # Try parsing ISO format string to datetime for integrity service
+                try:
+                    timestamp_dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                except:
+                    timestamp_dt = datetime.now()
+            elif timestamp is None:
+                timestamp_dt = datetime.now()
+            else:
+                timestamp_dt = timestamp
+            
+            integrity_payload = {
+                "user_id": rec.get("user_id") or rec.get("user", ""),
+                "agent_id": rec.get("agent_id") or rec.get("context_tag", ""),
+                "signal_type": rec.get("signal_type", sentiment),
+                "timestamp": timestamp_dt.isoformat(),
+                "payload": rec.get("payload", {})
+            }
+            async with httpx.AsyncClient(timeout=5) as client:
+                integrity_response = await client.post(
+                    INTEGRITY_URL,
+                    json=integrity_payload,
+                    headers={"X-API-Key": INTEGRITY_API_KEY}
+                )
+                if integrity_response.status_code != 200:
+                    integrity_issues.append(f"Integrity check failed: {integrity_response.status_code}")
+        except Exception as e:
+            # Don't break logging on integrity failure
+            print(f"integrity service error: {e}")
+            integrity_issues.append(f"Integrity service unreachable: {str(e)}")
+    
+    # 3) Build router payload (schema-aligned)
+    # Extract values from top-level or payload
+    user = rec.get("user_id") or rec.get("user", "")
+    session_id = rec.get("session_id", "default")
+    timestamp = rec.get("timestamp") or datetime.now().isoformat()
+    payload = rec.get("payload", {})
+    
+    router_payload = {
+        "user": user,
+        "session_id": session_id,
+        "timestamp": timestamp,
+        "text": rec.get("text") or payload.get("text"),
+        "hrv": rec.get("hrv") or payload.get("hrv"),
+        "ecg": rec.get("ecg") or payload.get("ecg"),
+        "gsr": rec.get("gsr") or payload.get("gsr"),
+        "fused_score": rec.get("fused_score") or payload.get("fused_score"),
+        "context_tag": rec.get("agent_id") or rec.get("context_tag") or "mixed_signal",
+        "vy": {
+            "integrity_ok": integrity_ok and len(integrity_issues) == 0,
+            "issues": integrity_issues,
+            "sentiment": sentiment
+        }
+    }
+    
+    # 4) Forward to router
+    async with httpx.AsyncClient(timeout=5) as client:
+        try:
+            await client.post(ROUTER_URL, json=router_payload)
+        except Exception as e:
+            # Don't break logging on forward failure
+            print(f"router forward error: {e}")
+    
+    return {"status": "ok", "logged": rec}
 
 @app.get("/logs/{agent_id}/{user_id}")
 def get_logs(agent_id: str, user_id: str):

@@ -1,11 +1,11 @@
 database:
-  url: ${DATABASE_URL:-sqlite:///integrity.db}
+  url: sqlite:///integrity.db
 
 redis:
-  url: ${REDIS_URL:-redis://localhost:6379/0}
+  url: redis://localhost:6379/0
 
 webhook:
-  url: ${ALERT_WEBHOOK_URL:-}
+  url: ""
 
 thresholds:
   default: 10

@@ -152,3 +152,125 @@ Edge Cases
 ### Contributors
 Vy Vuong (Author)
 Maintainer: Matt <October 2025> (ownership transfer from Vy)
+
+---
+
+## Integration Notes (Oct 2025)
+
+This service has been integrated with the **Signal-Router-Service** (Matt, Oct 2025).
+
+- All logs and validated events are now automatically forwarded to the router endpoint at:
+
+  `http://localhost:9000/ingest`
+
+- The router handles encrypted, recursive storage of all signal history.
+- Ownership: **Matt**
+
+### Configuration
+
+Create a `.env` file in the root directory with:
+Make your api key anything you wish, would be replaced in a different system with something more complex. 
+
+```bash
+# Router Integration Configuration
+ROUTER_URL=http://localhost:9000/ingest
+
+# Integrity Service Configuration (optional)
+INTEGRITY_URL=http://localhost:8001/event
+INTEGRITY_API_KEY=your_api_key_here
+```
+
+### Schema Mapping
+
+The `/log` endpoint accepts Vy's format and transforms it to the router's expected schema:
+
+**Vy Format:**
+```json
+{
+  "user_id": "string",
+  "agent_id": "string",
+  "timestamp": "ISO-8601",
+  "payload": {
+    "text": "optional utterance",
+    "hrv": 42,
+    "ecg": 0.83,
+    "gsr": 0.12,
+    "fused_score": 0.74
+  }
+}
+```
+
+**Router Format (automatically mapped):**
+```json
+{
+  "user": "string",
+  "session_id": "string",
+  "timestamp": "ISO-8601",
+  "text": "optional utterance",
+  "hrv": 42,
+  "ecg": 0.83,
+  "gsr": 0.12,
+  "fused_score": 0.74,
+  "context_tag": "string",
+  "vy": {
+    "integrity_ok": true,
+    "issues": [],
+    "sentiment": "neutral"
+  }
+}
+```
+
+**Field Mappings:**
+- `user_id` → `user`
+- `agent_id` → `context_tag` (or `vy.agent_id`)
+- `payload.hrv/ecg/gsr/text/fused_score` → flattened to top-level fields
+- Integrity result → `vy.integrity_ok` + `vy.issues`
+- Sentiment label from logging → `vy.sentiment`
+
+### Integration Flow
+
+1. **Logging Service** (`/log` on port 8000):
+   - Classifies sentiment from text
+   - Writes to `logs.jsonl`
+   - Optionally calls Integrity Service
+   - Forwards to Router Service
+
+2. **Integrity Service** (`/event` on port 8001, optional):
+   - Validates event schema
+   - Detects anomalies
+   - Returns integrity status
+
+3. **Router Service** (`/ingest` on port 9000):
+   - Receives transformed payloads
+   - Stores encrypted history
+   - Provides observability endpoints
+
+### Upstream Services
+
+- **Vy Logging Service**: Port 8000
+- **Vy Integrity Service**: Port 8001
+- **Signal Router Service**: Port 9000 (Matt's router)
+
+### Testing the Integration
+
+Use the provided helper scripts to test the end-to-end flow:
+
+**Bash/Linux/Mac:**
+```bash
+chmod +x smoke_log.sh verify_router.sh
+./smoke_log.sh      # Send test log to Vy service → router
+./verify_router.sh   # Check router status and logs
+```
+
+**PowerShell (Windows):**
+```powershell
+.\smoke_log.ps1      # Send test log to Vy service → router
+.\verify_router.ps1   # Check router status and logs
+```
+
+### Expected Flow
+
+1. Run Vy's services (8000 + 8001)
+2. Run Matt's router (9000)
+3. Execute `smoke_log.sh` (or `smoke_log.ps1`) → creates a new log entry and forwards to router
+4. Execute `verify_router.sh` (or `verify_router.ps1`) → returns updated router status and encrypted log confirmation
