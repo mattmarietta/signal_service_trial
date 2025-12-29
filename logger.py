@@ -1,11 +1,16 @@
 import json
+import os
 from datetime import datetime
 from collections import Counter
+from typing import List, Dict
 from classifier import classify_signal
 
 class Logger:
     def __init__(self, output="logs.jsonl"):
         self.output = output
+        # Ensure log file exists with proper permissions
+        if not os.path.exists(self.output):
+            open(self.output, 'a').close()
 
     def write(self, agent_id, user_id, user_input,
               detected_signal=None, response_type="",
@@ -27,8 +32,14 @@ class Logger:
             "session_id": session_id
         }
 
-        with open(self.output, 'a') as f:
-            f.write(json.dumps(data) + '\n')
+        try:
+            with open(self.output, 'a') as f:
+                f.write(json.dumps(data) + '\n')
+                f.flush()  # Ensure data is written to disk
+                os.fsync(f.fileno())  # Force OS to write to disk
+        except IOError as e:
+            # Log error but don't crash the service
+            print(f"Error writing to log file: {e}")
 
     def read_recent(self, agent_id, user_id, limit=10):
         """Read last `limit` logs for a specific agent-user pair."""

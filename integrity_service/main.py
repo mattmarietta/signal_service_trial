@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import timedelta, datetime
 import yaml
 import redis
@@ -6,21 +7,63 @@ import requests
 from tenacity import retry, stop_after_attempt, wait_fixed
 from fastapi import FastAPI, HTTPException, Depends, Header
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pydantic import BaseModel
 from models import Event, Anomaly, SessionLocal, Base, engine
 from dotenv import load_dotenv
 
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 
 load_dotenv()
-# ─── 1. Load configuration ─────────────────────────────────────────────────────
-cfg = yaml.safe_load(open("config.yaml"))
-DB_URL       = cfg["database"]["url"]
-REDIS_URL    = cfg["redis"]["url"]
-WEBHOOK_URL  = cfg["webhook"]["url"]
-THRESHOLDS   = cfg["thresholds"]
 
-# ─── 2. Initialize Redis ──────────────────────────────────────────────────────
-r = redis.from_url(REDIS_URL, decode_responses=True)
+# ─── 1. Load and validate configuration ────────────────────────────────────────
+try:
+    with open("config.yaml") as f:
+        cfg = yaml.safe_load(f)
+
+    # Validate required configuration keys
+    required_keys = ["database", "redis", "thresholds"]
+    for key in required_keys:
+        if key not in cfg:
+            raise ValueError(f"Missing required config key: {key}")
+
+    DB_URL       = cfg["database"]["url"]
+    REDIS_URL    = cfg["redis"]["url"]
+    WEBHOOK_URL  = cfg.get("webhook", {}).get("url", "")
+    THRESHOLDS   = cfg["thresholds"]
+
+    logger.info(f"Configuration loaded successfully from config.yaml")
+    logger.info(f"Database: {DB_URL}")
+    logger.info(f"Redis: {REDIS_URL}")
+    logger.info(f"Webhook configured: {bool(WEBHOOK_URL)}")
+
+except FileNotFoundError:
+    logger.error("config.yaml not found in current directory")
+    raise
+except yaml.YAMLError as e:
+    logger.error(f"Failed to parse config.yaml: {e}")
+    raise
+except Exception as e:
+    logger.error(f"Configuration error: {e}")
+    raise
+
+# ─── 2. Initialize Redis with connection validation ────────────────────────────
+try:
+    r = redis.from_url(REDIS_URL, decode_responses=True)
+    r.ping()  # Test connection on startup
+    logger.info("Redis connection successful")
+except redis.ConnectionError as e:
+    logger.error(f"Failed to connect to Redis at {REDIS_URL}: {e}")
+    raise
+except Exception as e:
+    logger.error(f"Redis initialization error: {e}")
+    raise
 
 # ─── 3. FastAPI app & Auth stub ────────────────────────────────────────────────
 app = FastAPI(title="Signal Integrity Monitor")
@@ -54,7 +97,9 @@ class SignalEvent(BaseModel):
 @app.get("/health")
 def health():
     try:
-        engine.execute("SELECT 1")
+        # Use SQLAlchemy 2.x compatible approach
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         r.ping()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unhealthy: {e}")
@@ -100,7 +145,13 @@ def ingest(evt: SignalEvent, db: Session = Depends(get_db)):
         db.add(anomaly)
         commit_with_retry(db)
 
-        # 6. Webhook alert for critical
+        # 6. Log anomaly detection
+        logger.warning(
+            f"Anomaly detected - user: {evt.user_id}, type: {evt.signal_type}, "
+            f"count: {count}, severity: {severity}, threshold: {thresh}"
+        )
+
+        # 7. Webhook alert for critical
         if severity == "critical" and WEBHOOK_URL:
             try:
                 requests.post(
@@ -114,8 +165,9 @@ def ingest(evt: SignalEvent, db: Session = Depends(get_db)):
                     },
                     timeout=1
                 )
-            except Exception:
-                pass
+                logger.info(f"Critical anomaly webhook sent for user {evt.user_id}")
+            except Exception as e:
+                logger.error(f"Failed to send webhook alert: {e}")
 
     return {"status": "ingested"}
 
