@@ -9,11 +9,18 @@ import io
 import os
 import json
 import httpx
+import logging
 from datetime import datetime
 
 from logger import Logger
 from classifier import classify_signal
 
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+log = logging.getLogger(__name__)
 
 logger = Logger("logs.jsonl")
 app = FastAPI(title="Signal Service API")
@@ -24,6 +31,8 @@ ROUTER_URL = os.getenv("ROUTER_URL", "http://localhost:9000/ingest")
 INTEGRITY_URL = os.getenv("INTEGRITY_URL", "http://localhost:8001/event")
 INTEGRITY_API_KEY = os.getenv("INTEGRITY_API_KEY", "")
 
+log.info(f"Service starting - Router: {ROUTER_URL}, Integrity: {INTEGRITY_URL}")
+
 # Enable CORS for frontend
 app.add_middleware(
     CORSMiddleware,
@@ -32,6 +41,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint for monitoring and load balancers"""
+    return {
+        "status": "ok",
+        "service": "signal-logging",
+        "version": "1.0.0"
+    }
 
 @app.post("/log")
 async def log_interaction(data: dict):
@@ -45,11 +63,11 @@ async def log_interaction(data: dict):
     # 1) Classify sentiment from text
     text = data.get("text") or data.get("payload", {}).get("text") or data.get("user_input", "")
     sentiment = classify_signal(text) if text else "neutral"
-    
+
     # Prepare record for logging
     rec = data.copy()
     rec["sentiment"] = sentiment
-    
+
     # Write to logs.jsonl (backwards compatible with existing logger.write)
     # Handle both old format (agent_id, user_id, user_input) and new format (user_id, agent_id, timestamp, payload)
     if "user_input" in rec:
@@ -65,11 +83,11 @@ async def log_interaction(data: dict):
         # New format - write raw JSON to logs.jsonl
         with open("logs.jsonl", "a") as f:
             f.write(json.dumps(rec) + "\n")
-    
+
     # 2) Optionally call integrity service
     integrity_ok = True
     integrity_issues = []
-    
+
     # If integrity URL is configured and API key exists, call it
     if INTEGRITY_URL and INTEGRITY_API_KEY:
         try:
@@ -85,7 +103,7 @@ async def log_interaction(data: dict):
                 timestamp_dt = datetime.now()
             else:
                 timestamp_dt = timestamp
-            
+
             integrity_payload = {
                 "user_id": rec.get("user_id") or rec.get("user", ""),
                 "agent_id": rec.get("agent_id") or rec.get("context_tag", ""),
@@ -101,18 +119,19 @@ async def log_interaction(data: dict):
                 )
                 if integrity_response.status_code != 200:
                     integrity_issues.append(f"Integrity check failed: {integrity_response.status_code}")
+                    log.warning(f"Integrity check failed with status {integrity_response.status_code}")
         except Exception as e:
             # Don't break logging on integrity failure
-            print(f"integrity service error: {e}")
+            log.error(f"Integrity service error: {e}")
             integrity_issues.append(f"Integrity service unreachable: {str(e)}")
-    
+
     # 3) Build router payload (schema-aligned)
     # Extract values from top-level or payload
     user = rec.get("user_id") or rec.get("user", "")
     session_id = rec.get("session_id", "default")
     timestamp = rec.get("timestamp") or datetime.now().isoformat()
     payload = rec.get("payload", {})
-    
+
     router_payload = {
         "user": user,
         "session_id": session_id,
@@ -129,15 +148,17 @@ async def log_interaction(data: dict):
             "sentiment": sentiment
         }
     }
-    
+
     # 4) Forward to router
     async with httpx.AsyncClient(timeout=5) as client:
         try:
             await client.post(ROUTER_URL, json=router_payload)
+            log.debug(f"Forwarded event to router for user {user}")
         except Exception as e:
             # Don't break logging on forward failure
-            print(f"router forward error: {e}")
-    
+            log.error(f"Router forward error: {e}")
+
+    log.info(f"Logged event - user: {user}, sentiment: {sentiment}")
     return {"status": "ok", "logged": rec}
 
 @app.get("/logs/{agent_id}/{user_id}")

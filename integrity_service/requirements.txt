@@ -6,3 +6,4 @@ redis
 requests
 PyYAML
 tenacity
+python-dotenv
